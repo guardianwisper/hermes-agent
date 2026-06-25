@@ -323,10 +323,15 @@ function isPathUnder(folder: string, target: string): boolean {
 }
 
 /**
- * The project a plain main-checkout live session belongs to (overview
- * membership) — explicit project by longest-prefix folder, else the repo root
- * (the auto-project id). Returns null for sessions we can't place without the
- * backend (cwd-less, kanban, or a linked worktree); those wait for the refresh.
+ * The project a live session belongs to (overview membership) — explicit project
+ * by longest-prefix folder, else the repo root (the auto-project id). An IN-TREE
+ * linked worktree (`<repoRoot>/.worktrees/<slug>`) belongs to the SAME project as
+ * its repo root (the root is right there in the path), so a freshly-created
+ * worktree session — e.g. from "convert a branch" / "new worktree" — surfaces in
+ * the overview at once instead of waiting for the next backend refresh. Returns
+ * null only for sessions we genuinely can't place from the row alone: cwd-less,
+ * kanban-task worktrees (they fold into the kanban bucket), or a worktree that
+ * lives OUTSIDE the repo root (a sibling dir whose project can't be derived).
  */
 export function liveSessionProjectId(session: SessionInfo, explicitProjects: ProjectInfo[]): null | string {
   const cwd = (session.cwd || '').trim()
@@ -339,7 +344,7 @@ export function liveSessionProjectId(session: SessionInfo, explicitProjects: Pro
   const repoRoot = (session.git_repo_root || '').trim() || cwd
   const underRepo = cwd === repoRoot || cwd.startsWith(`${repoRoot}/`) || cwd.startsWith(`${repoRoot}\\`)
 
-  if (!underRepo || cwd.startsWith(`${repoRoot}/.worktrees/`) || cwd.startsWith(`${repoRoot}\\.worktrees\\`)) {
+  if (!underRepo) {
     return null
   }
 

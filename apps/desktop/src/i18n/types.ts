@@ -1071,6 +1071,14 @@ export interface Translations {
       newWorktreeDesc: string
       branchPlaceholder: string
       startWorkFailed: string
+      convertBranch: string
+      convertBranchTitle: string
+      convertBranchDesc: string
+      convertBranchPlaceholder: string
+      convertBranchInstead: string
+      branchCheckedOut: string
+      branchesLoading: string
+      noBranches: string
       removeWorktree: string
       removeWorktreeFailed: string
       removeWorktreeConfirm: string

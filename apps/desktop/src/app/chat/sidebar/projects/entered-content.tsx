@@ -108,8 +108,23 @@ function RepoFlatSection({
     return mergeRepoWorktreeGroups({ id: repo.id, path: repo.path, groups }, discoveredWorktrees)
   }, [repo, mergedGroups, discoveredWorktrees, liveSessions, removedSessionIds])
 
+  const discoveredWorktreePaths = useMemo(
+    () =>
+      new Set(
+        (discoveredWorktrees ?? [])
+          .map(worktree => worktree.path?.trim())
+          .filter((path): path is string => Boolean(path))
+      ),
+    [discoveredWorktrees]
+  )
+
   // Main lanes are always visible; linked worktrees can be user-dismissed.
-  const ordered = overlaidGroups.filter(group => group.isMain || !dismissedWorktrees.includes(group.id))
+  // A live `git worktree list` hit wins over an old dismissal: if git says the
+  // worktree exists again (or still exists after "hide from sidebar"), surface it.
+  const ordered = overlaidGroups.filter(
+    group => group.isMain || !dismissedWorktrees.includes(group.id) || (group.path && discoveredWorktreePaths.has(group.path))
+  )
+
   const repoCount = ordered.reduce((sum, group) => sum + group.sessions.length, 0)
 
   // Removal asks how: actually `git worktree remove` it, or just hide the lane

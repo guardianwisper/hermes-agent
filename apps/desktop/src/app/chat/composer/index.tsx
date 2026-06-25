@@ -62,7 +62,7 @@ import {
 import { $statusItemsBySession } from '@/store/composer-status'
 import { notify } from '@/store/notifications'
 import { $previewStatusBySession } from '@/store/preview-status'
-import { requestStartWorkSession, startWorkInRepo, switchBranchInRepo } from '@/store/projects'
+import { listRepoBranches, requestStartWorkSession, startWorkInRepo, switchBranchInRepo } from '@/store/projects'
 import { toggleReview } from '@/store/review'
 import { $gatewayState, $messages, setSessionPickerOpen } from '@/store/session'
 import { $threadScrolledUp } from '@/store/thread-scroll'
@@ -1383,6 +1383,33 @@ export function ChatBar({
     [cwd, openInWorktree]
   )
 
+  // Convert an EXISTING branch into a fresh worktree + session (no new branch).
+  // Mirrors handleBranchOff's hand-off: create the worktree, then open a session
+  // anchored there carrying the draft.
+  const handleConvertBranch = useCallback(
+    async (branch: string, path?: null | string) => {
+      if (path?.trim()) {
+        openInWorktree(path)
+
+        return
+      }
+
+      const repoPath = cwd?.trim()
+      const result = repoPath && (await startWorkInRepo(repoPath, { existingBranch: branch }))
+
+      if (result) {
+        openInWorktree(result.path)
+      }
+    },
+    [cwd, openInWorktree]
+  )
+
+  const handleListBranches = useCallback(async () => {
+    const repoPath = cwd?.trim()
+
+    return repoPath ? listRepoBranches(repoPath) : []
+  }, [cwd])
+
   const handleSwitchBranch = useCallback(
     async (branch: string) => {
       const repoPath = cwd?.trim()
@@ -2210,6 +2237,8 @@ export function ChatBar({
               />
               <CodingStatusRow
                 onBranchOff={handleBranchOff}
+                onConvertBranch={handleConvertBranch}
+                onListBranches={handleListBranches}
                 onOpen={toggleReview}
                 onOpenWorktree={openInWorktree}
                 onSwitchBranch={handleSwitchBranch}

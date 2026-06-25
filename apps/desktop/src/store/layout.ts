@@ -136,6 +136,16 @@ export function dismissWorktree(id: string): void {
   }
 }
 
+// A hidden worktree becomes visible again as soon as the user explicitly starts
+// or opens work there (for example, selecting an already-checked-out branch).
+export function restoreWorktree(id: string): void {
+  const current = $dismissedWorktreeIds.get()
+
+  if (current.includes(id)) {
+    $dismissedWorktreeIds.set(current.filter(worktreeId => worktreeId !== id))
+  }
+}
+
 export function setSidebarWidth(width: number) {
   const bounded = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_DEFAULT_WIDTH, width))
   setPaneWidthOverride(CHAT_SIDEBAR_PANE_ID, bounded)

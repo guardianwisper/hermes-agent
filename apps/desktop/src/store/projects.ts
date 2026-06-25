@@ -1,6 +1,7 @@
 import { atom } from 'nanostores'
 
 import { liveSessionProjectId, type SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
+import type { HermesGitBranch } from '@/global'
 import { persistentAtom } from '@/lib/persisted'
 import { activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
 import { setSidebarAgentsGrouped } from '@/store/layout'
@@ -630,7 +631,7 @@ export function refreshWorktrees(): void {
 // truth; the caller starts a session in the returned path.
 export async function startWorkInRepo(
   repoPath: string,
-  options?: { name?: string; branch?: string; base?: string }
+  options?: { name?: string; branch?: string; base?: string; existingBranch?: string }
 ): Promise<null | { path: string; branch: string }> {
   const git = window.hermesDesktop?.git
 
@@ -642,6 +643,18 @@ export async function startWorkInRepo(
   bumpWorktrees()
 
   return { branch: result.branch, path: result.path }
+}
+
+// Local branches for the composer's "convert a branch into a worktree" picker.
+// Empty on a remote backend / non-repo (the Electron probe can't run).
+export async function listRepoBranches(repoPath: string): Promise<HermesGitBranch[]> {
+  const git = window.hermesDesktop?.git
+
+  if (!git?.branchList || !repoPath) {
+    return []
+  }
+
+  return git.branchList(repoPath)
 }
 
 export async function switchBranchInRepo(repoPath: string, branch: string): Promise<void> {

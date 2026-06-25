@@ -176,6 +176,23 @@ async function addWorktree(repoPath, options, gitBin) {
   await ensureGitRepo(gitBin, resolved)
   const root = await mainRoot(gitBin, resolved)
   const opts = options || {}
+
+  // "Convert an existing branch into a worktree": check the branch out into a
+  // fresh worktree dir as-is (no `-b`, no new branch). Dir is named off the
+  // branch slug so it reads like the branch it carries.
+  if (opts.existingBranch) {
+    const existing = sanitizeBranch(opts.existingBranch)
+
+    if (!existing) {
+      throw new Error('Branch name is required.')
+    }
+
+    const dir = uniqueDir(path.join(root, '.worktrees', slugify(existing)))
+    await runGit(gitBin, ['worktree', 'add', dir, existing], root)
+
+    return { path: dir, branch: existing, repoRoot: root }
+  }
+
   const slug = slugify(opts.name || `work-${Date.now().toString(36)}`)
   const branch = sanitizeBranch(opts.branch) || `hermes/${slug}`
   const dir = uniqueDir(path.join(root, '.worktrees', slug))
@@ -217,6 +234,38 @@ async function removeWorktree(repoPath, worktreePath, options, gitBin) {
   return { removed: resolvedTree }
 }
 
+// List local branches for the "convert a branch into a worktree" picker, most
+// recently committed first. Each carries whether it's already checked out in a
+// worktree and, when checked out, that worktree's path. Empty on a non-repo /
+// remote backend where the probe can't run.
+async function listBranches(repoPath, gitBin) {
+  let resolved
+
+  try {
+    resolved = resolveRequestedPathForIpc(repoPath, { purpose: 'Branch list' })
+  } catch {
+    return []
+  }
+
+  try {
+    const out = await runGit(
+      gitBin,
+      ['for-each-ref', '--format=%(refname:short)', '--sort=-committerdate', 'refs/heads'],
+      resolved
+    )
+    const trees = await listWorktrees(resolved, gitBin)
+    const pathByBranch = new Map(trees.filter(tree => tree.branch).map(tree => [tree.branch, tree.path]))
+
+    return out
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(name => ({ name, checkedOut: pathByBranch.has(name), worktreePath: pathByBranch.get(name) || null }))
+  } catch {
+    return []
+  }
+}
+
 async function switchBranch(repoPath, branch, gitBin) {
   const resolved = resolveRequestedPathForIpc(repoPath, { purpose: 'Branch switch' })
   const target = sanitizeBranch(branch)
@@ -233,6 +282,7 @@ async function switchBranch(repoPath, branch, gitBin) {
 module.exports = {
   addWorktree,
   ensureGitRepo,
+  listBranches,
   listWorktrees,
   parseWorktrees,
   removeWorktree,

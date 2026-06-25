@@ -399,10 +399,29 @@ describe('liveSessionProjectId', () => {
     expect(id).toBe('p_app')
   })
 
-  it('skips cwd-less, kanban, and linked-worktree sessions (backend folds those)', () => {
+  it('skips cwd-less, kanban-task, and out-of-tree (sibling) worktree sessions', () => {
     expect(liveSessionProjectId(makeSession(null), [])).toBeNull()
+    // Kanban task worktree → folds into the kanban bucket, not a project preview.
     expect(liveSessionProjectId(makeSession('/repo/.worktrees/t_aaaaaaaa'), [])).toBeNull()
+    // Sibling worktree OUTSIDE the repo root → project can't be derived from the row.
     expect(liveSessionProjectId(makeSession('/elsewhere/wt', { git_repo_root: '/repo' }), [])).toBeNull()
+  })
+
+  it('places an in-tree worktree session under its repo project (the root is in the path)', () => {
+    // "Convert a branch" / "new worktree" land at `<repoRoot>/.worktrees/<slug>`,
+    // so they belong to the same auto project as the repo root and must show in
+    // the overview at once, not wait for the next backend refresh.
+    expect(
+      liveSessionProjectId(makeSession('/www/app/.worktrees/test1', { git_repo_root: '/www/app' }), [])
+    ).toBe('/www/app')
+  })
+
+  it('routes an in-tree worktree session to the owning explicit project', () => {
+    const id = liveSessionProjectId(makeSession('/www/app/.worktrees/test1', { git_repo_root: '/www/app' }), [
+      makeProject('p_app', ['/www/app'])
+    ])
+
+    expect(id).toBe('p_app')
   })
 })
 

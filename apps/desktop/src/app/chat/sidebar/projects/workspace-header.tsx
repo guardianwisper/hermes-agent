@@ -1,8 +1,9 @@
 import type * as React from 'react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import {
@@ -13,11 +14,12 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { SanitizedInput } from '@/components/ui/sanitized-input'
+import type { HermesGitBranch } from '@/global'
 import { useI18n } from '@/i18n'
 import { gitRef } from '@/lib/sanitize'
 import { cn } from '@/lib/utils'
 import { notifyError } from '@/store/notifications'
-import { copyPath, revealPath, startWorkInRepo } from '@/store/projects'
+import { copyPath, listRepoBranches, revealPath, startWorkInRepo } from '@/store/projects'
 
 import { SidebarCount, SidebarRowLead } from '../chrome'
 
@@ -114,9 +116,33 @@ export function WorkspaceMenu({ path, onRemove }: { path: null | string; onRemov
 export function StartWorkButton({ repoPath, onStarted }: { repoPath: string; onStarted: (path: string) => void }) {
   const { t } = useI18n()
   const s = t.sidebar
+  const p = s.projects
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [pending, setPending] = useState(false)
+  // "Convert an existing branch into a worktree" sub-mode: the body swaps the
+  // new-branch name input for a filterable list of the repo's branches.
+  const [convertMode, setConvertMode] = useState(false)
+  const [branches, setBranches] = useState<HermesGitBranch[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+
+  // Pull the repo's branches each time the picker is entered (cheap + bounded),
+  // so a branch created mid-session shows up.
+  const loadBranches = useCallback(async () => {
+    if (!repoPath) {
+      return
+    }
+
+    setBranchesLoading(true)
+
+    try {
+      setBranches(await listRepoBranches(repoPath))
+    } catch {
+      setBranches([])
+    } finally {
+      setBranchesLoading(false)
+    }
+  }, [repoPath])
 
   const submit = async () => {
     const branch = name.trim()
@@ -138,52 +164,145 @@ export function StartWorkButton({ repoPath, onStarted }: { repoPath: string; onS
         setName('')
       }
     } catch (err) {
-      notifyError(err, s.projects.startWorkFailed)
+      notifyError(err, p.startWorkFailed)
     } finally {
       setPending(false)
     }
   }
 
+  // Check an EXISTING branch out into a fresh worktree (no new branch).
+  const convert = async (branch: HermesGitBranch) => {
+    if (pending || !repoPath || !branch) {
+      return
+    }
+
+    setPending(true)
+
+    try {
+      const result = branch.worktreePath
+        ? { branch: branch.name, path: branch.worktreePath }
+        : await startWorkInRepo(repoPath, { existingBranch: branch.name })
+
+      if (result) {
+        onStarted(result.path)
+        setOpen(false)
+      }
+    } catch (err) {
+      notifyError(err, p.startWorkFailed)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const enterConvert = () => {
+    setConvertMode(true)
+    void loadBranches()
+  }
+
   return (
     <>
       <button
-        aria-label={s.projects.startWork}
+        aria-label={p.startWork}
         className="grid size-4 shrink-0 place-items-center rounded-sm bg-transparent text-(--ui-text-quaternary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground group-hover/section:opacity-100 focus-visible:opacity-100"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setConvertMode(false)
+          setName('')
+          setOpen(true)
+        }}
         type="button"
       >
         <Codicon name="git-branch" size="0.75rem" />
       </button>
-      <Dialog onOpenChange={setOpen} open={open}>
+      <Dialog onOpenChange={next => !pending && setOpen(next)} open={open}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{s.projects.newWorktreeTitle}</DialogTitle>
-            <DialogDescription>{s.projects.newWorktreeDesc}</DialogDescription>
+            <DialogTitle>{convertMode ? p.convertBranchTitle : p.newWorktreeTitle}</DialogTitle>
+            <DialogDescription>{convertMode ? p.convertBranchDesc : p.newWorktreeDesc}</DialogDescription>
           </DialogHeader>
-          <SanitizedInput
-            autoFocus
-            disabled={pending}
-            onKeyDown={event => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                void submit()
-              } else if (event.key === 'Escape') {
-                setOpen(false)
-              }
-            }}
-            onValueChange={setName}
-            placeholder={s.projects.branchPlaceholder}
-            sanitize={gitRef}
-            value={name}
-          />
-          <DialogFooter>
-            <Button disabled={pending} onClick={() => setOpen(false)} type="button" variant="ghost">
-              {t.common.cancel}
-            </Button>
-            <Button disabled={pending || !name.trim()} onClick={() => void submit()} type="button">
-              {s.projects.startWork}
-            </Button>
-          </DialogFooter>
+
+          {convertMode ? (
+            <Command
+              className="rounded-md border border-(--ui-stroke-tertiary)"
+              filter={(value, search) => (value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}
+            >
+              <CommandInput autoFocus disabled={pending} placeholder={p.convertBranchPlaceholder} />
+              <CommandList className="max-h-64">
+                <CommandEmpty>{branchesLoading ? p.branchesLoading : p.noBranches}</CommandEmpty>
+                <CommandGroup>
+                  {branches.map(branch => (
+                    <CommandItem
+                      disabled={pending}
+                      key={branch.name}
+                      onSelect={() => void convert(branch)}
+                      value={branch.name}
+                    >
+                      <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="git-branch" size="0.8rem" />
+                      <span className="truncate">{branch.name}</span>
+                      {branch.checkedOut && (
+                        <span className="ml-auto shrink-0 text-[0.625rem] text-(--ui-text-tertiary)">
+                          {p.branchCheckedOut}
+                        </span>
+                      )}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          ) : (
+            <SanitizedInput
+              autoFocus
+              disabled={pending}
+              onKeyDown={event => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void submit()
+                } else if (event.key === 'Escape') {
+                  setOpen(false)
+                }
+              }}
+              onValueChange={setName}
+              placeholder={p.branchPlaceholder}
+              sanitize={gitRef}
+              value={name}
+            />
+          )}
+
+          {convertMode ? (
+            // The picker is a sub-screen: a single "Cancel" link steps back to
+            // the new-branch screen (the dialog's own ✕ / Esc still closes it).
+            <DialogFooter className="sm:justify-start">
+              <Button
+                className="px-0 text-(--ui-text-secondary) hover:text-foreground"
+                disabled={pending}
+                onClick={() => setConvertMode(false)}
+                type="button"
+                variant="link"
+              >
+                {t.common.cancel}
+              </Button>
+            </DialogFooter>
+          ) : (
+            <DialogFooter className="sm:justify-between">
+              {/* Switch into the convert-an-existing-branch picker. */}
+              <Button
+                className="px-0 text-(--ui-text-secondary) hover:text-foreground"
+                disabled={pending}
+                onClick={enterConvert}
+                type="button"
+                variant="link"
+              >
+                {p.convertBranchInstead}
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button disabled={pending} onClick={() => setOpen(false)} type="button" variant="ghost">
+                  {t.common.cancel}
+                </Button>
+                <Button disabled={pending || !name.trim()} onClick={() => void submit()} type="button">
+                  {p.startWork}
+                </Button>
+              </div>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </>

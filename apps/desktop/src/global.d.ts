@@ -106,7 +106,7 @@ declare global {
         worktreeList: (repoPath: string) => Promise<HermesGitWorktree[]>
         worktreeAdd: (
           repoPath: string,
-          options?: { name?: string; branch?: string; base?: string }
+          options?: { name?: string; branch?: string; base?: string; existingBranch?: string }
         ) => Promise<{ path: string; branch: string; repoRoot: string }>
         worktreeRemove: (
           repoPath: string,
@@ -114,6 +114,8 @@ declare global {
           options?: { force?: boolean }
         ) => Promise<{ removed: string }>
         branchSwitch: (repoPath: string, branch: string) => Promise<{ branch: string }>
+        // Local branches for the "convert a branch into a worktree" picker.
+        branchList: (repoPath: string) => Promise<HermesGitBranch[]>
         // Compact working-tree status for the composer coding rail. Null on a
         // non-repo / remote backend (where the Electron probe can't run).
         repoStatus: (repoPath: string) => Promise<HermesRepoStatus | null>
@@ -571,6 +573,14 @@ export interface HermesGitWorktree {
   isMain: boolean
   detached: boolean
   locked: boolean
+}
+
+// A local branch as offered by the "convert a branch into a worktree" picker.
+// `checkedOut` marks branches git won't let a second worktree claim.
+export interface HermesGitBranch {
+  name: string
+  checkedOut: boolean
+  worktreePath: null | string
 }
 
 // A single changed path from `git status --porcelain=v2`, classified by state

@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     worktreeRemove: (repoPath, worktreePath, options) =>
       ipcRenderer.invoke('hermes:git:worktreeRemove', repoPath, worktreePath, options),
     branchSwitch: (repoPath, branch) => ipcRenderer.invoke('hermes:git:branchSwitch', repoPath, branch),
+    branchList: repoPath => ipcRenderer.invoke('hermes:git:branchList', repoPath),
     repoStatus: repoPath => ipcRenderer.invoke('hermes:git:repoStatus', repoPath),
     fileDiff: (repoPath, filePath) => ipcRenderer.invoke('hermes:git:fileDiff', repoPath, filePath),
     scanRepos: (roots, options) => ipcRenderer.invoke('hermes:git:scanRepos', roots, options),

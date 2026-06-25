@@ -34,6 +34,7 @@ import {
   FILE_BROWSER_MIN_WIDTH,
   pinSession,
   PREVIEW_PANE_ID,
+  restoreWorktree,
   setSidebarOverlayMounted,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -52,7 +53,7 @@ import {
   normalizeProfileKey,
   refreshActiveProfile
 } from '../store/profile'
-import { $startWorkSessionRequest, resolveNewSessionCwd } from '../store/projects'
+import { $startWorkSessionRequest, followActiveSessionCwd, resolveNewSessionCwd } from '../store/projects'
 import { $reviewOpen, REVIEW_PANE_ID } from '../store/review'
 import {
   $activeSessionId,
@@ -851,8 +852,22 @@ export function DesktopController() {
       setCurrentCwd(target)
       void requestGateway<{ branch?: string; cwd?: string }>('config.get', { key: 'project', cwd: target })
         .then(info => {
-          setCurrentCwd(info.cwd || target)
+          const resolved = info.cwd || target
+
+          setCurrentCwd(resolved)
           setCurrentBranch(info.branch || '')
+
+          // An EXPLICIT target (a worktree/lane path — e.g. just-created via
+          // "convert a branch" / "new worktree") drills the sidebar into that
+          // project so the new lane is visible at once. Without this, a brand-new
+          // worktree session is invisible from the all-projects overview (the
+          // live overlay skips `.worktrees` rows, and the session.info cwd-follow
+          // only fires on a same-session move, not a fresh session). The
+          // path-less trunk "+" keeps the current scope untouched.
+          if (path?.trim()) {
+            restoreWorktree(resolved)
+            void followActiveSessionCwd(resolved)
+          }
         })
         .catch(() => undefined)
     },

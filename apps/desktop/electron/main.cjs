@@ -55,7 +55,7 @@ const {
   buildRelaunchScript
 } = require('./update-relaunch.cjs')
 const { gitRootForIpc } = require('./git-root.cjs')
-const { addWorktree, listWorktrees, removeWorktree, switchBranch } = require('./git-worktree-ops.cjs')
+const { addWorktree, listBranches, listWorktrees, removeWorktree, switchBranch } = require('./git-worktree-ops.cjs')
 const {
   fileDiffVsHead,
   repoStatus,
@@ -6736,6 +6736,10 @@ ipcMain.handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePat
 
 ipcMain.handle('hermes:git:branchSwitch', async (_event, repoPath, branch) =>
   switchBranch(repoPath, branch, resolveGitBinary())
+)
+
+ipcMain.handle('hermes:git:branchList', async (_event, repoPath) =>
+  listBranches(repoPath, resolveGitBinary())
 )
 
 // Compact repo status (branch, ahead/behind, change counts + files) for the
